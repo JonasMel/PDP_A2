@@ -1,0 +1,210 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include <float.h>
+#include <sys/time.h>
+#include <mpi.h>
+
+double timer();
+double initialize(double x, double y, double t);
+void save_solution(double *u, int Ny, int Nx, int n)
+
+int main(int argc, char **argv)
+{
+	if (argc != 4)
+		return -1;
+		
+	
+	
+	int Nx, Ny, Nt, px, py, i, j, left, right, top, bot;
+	double dt, dx, lambda2, *u_glob, *u, *u_old, *u_new;
+	double blk_x, blk_y, blk_size, blk_y_const, blk_x_const;
+	
+	Nx = atoi(argv[1]);
+	px = atoi(argv[2]);
+	py = atoi(argv[3]);
+	Ny = Nx;
+	Nt = Nx;
+	
+	if (Nx % px == 0)
+	{
+		blk_x = Nx/px;
+	}
+	
+	if (Ny % py == 0)
+	{
+		blk_y = Ny/py;
+	}
+	
+	blk_x_const = blk_x;
+	blk_y_const = blk_y;
+	blk_size = blk_x*blk_y;
+	dx = 1.0 / (Nx-1);
+	dt = 0.5*dx;
+	lambda2 = (dt/dx)*(dt/dx);
+	
+	/*Initializing MPI and creating cartesian grid for processors*/
+	MPI_Request *request;
+	MPI_Init(&argc, &argv);
+	int ndims = 2
+	int glob_rank, reorder, crt_rank, dims[ndims], cyclic[ndims], mycrds[ndims]; 
+	dims[] = {py, px};
+	cyclic[] = {0, 0};
+	reorder = 0;
+	
+	MPI_Comm_rank(MPI_COMM_WORLD, &glob_rank);
+	MPI_Comm com_crt, crt_col, crt_row;
+	MPI_Cart_create(MPI_COMM_WORLD, ndims, cyclic, reorder, &com_crt);
+	MPI_Comm_rank(com_crt, &crt_rank);
+	MPI_Cart_coords(com_crt, crt_rank, ndims, mycrds);
+	
+	/*Splitting cartesian grid into columns and rows*/
+	MPI_Comm_split(com_crt, mycrds[0], mycrds[1], &crt_row);
+	MPI_Comm_split(com_crt, mycrds[1], mycrds[0], &crt_col);
+	
+	/*Creating vector types for communication*/
+	MPI_Datatype blk, row, col;
+	MPI_Type_vector(blk_size, blk_x, Nx, MPI_DOUBLE, &blk);
+	MPI_Type_commit(&blk);
+
+	MPI_Type_vector(blk_y, 1, Nx, MPI_DOUBLE, &col);
+	MPI_Type_commit(&col);
+	MPI_Type_vector(1, blk_x, Nx, MPI_DOUBLE, &row);
+	MPI_Type_commit(&row);
+	
+	/*Checking location*/
+	left = 1;
+	right = 1;
+	top = 1;
+	bot = 1;
+	if (crt_cords[0] == 0)
+		top = 0;
+	
+	if (crt_cords[1] == px-1)
+		right = 0;
+	
+	if (crt_cords[1] == 0)
+		left = 0;
+		
+	if (crt_cords[0] == py-1)
+		bot = 0;
+	
+	
+	if (glob_rank == 0)
+	{
+		double x, y, *u0;
+		u_glob = (double*)malloc(Nx*Ny*sizeof(double));
+		u0 = (double*)malloc(Nx*Ny*sizeof(double));
+		for (i = 0; i < Ny; ++i)
+		{
+			for (j = 0; j < Nx; ++j)
+			{
+				y = i*dx;
+				x = j*dx;
+				u0[i*Nx + j] = initialize(x, y, 0);
+				u_glob[i*Nx + j] = initialize(x, y, dt);
+			}
+		}
+		int dest_cords[2], dest_rank;
+		request = (MPI_Request*)malloc(px*py*sizeof(MPI_Request));
+		for (i = 0; i < py; ++i)
+		{
+			for (j = 0; j < px; ++j)
+			{
+				dest_cords[0] = i;
+				dest_cords[1] = j;
+				MPI_Cart_rank(com_crt, dest_cords, &dest_rank);
+				if (!top && !left)
+				{
+					MPI_Type_vector(blk_y+1, blk_x+1, Nx, MPI_DOUBLE, &blk);
+					MPI_Type_commit(&blk);
+					MPI_Isend(&u0[0], 1, blk, dest_rank, dest_rank, \
+									com_crt, request[i*py + j]);
+				}
+				else if (!top && left && right)
+				{
+					MPI_Type_vector(blk_y+1, blk_x+2, Nx, MPI_DOUBLE, &blk);
+					MPI_Type_commit(&blk);
+					MPI_Isend(&u0[j*blk_x-1], 1, blk, dest_rank, dest_rank, \
+									com_crt, request[i*py + j]);
+				}
+				else if (!top && !right)
+				{
+					MPI_Type_vector(blk_y+1, blk_x+1, Nx, MPI_DOUBLE, &blk);
+					MPI_Type_commit(&blk);
+					MPI_Isend(&u0[j*blk_x-1], 1, blk, dest_rank, dest_rank, \
+									com_crt, request[i*py + j]);					
+				}
+				if (!bot && !left)
+				{
+					MPI_Type_vector(blk_y+1, blk_x+1, Nx, MPI_DOUBLE, &blk);
+					MPI_Type_commit(&blk);
+					MPI_Isend(&u0[Nx*Ny-Nx*(blk_y+1)], 1, blk, dest_rank, dest_rank, \
+									com_crt, request[i*py + j]);					
+				}
+				else if (!bot &&)
+				
+			}
+		}
+	}
+	
+	
+	  
+    /* Swap ptrs */
+    double *tmp = u_old;
+    u_old = u;
+    u = u_new;
+    u_new = tmp;
+
+    /* Apply stencil */
+    for(i = 1; i < (blk_y-1); ++i) {
+      for(j = 1; j < (blk_x-1); ++j) {
+
+        u_new[i*blk_x+j] = 2*u[i*blk_x+j] - u_old[i*blk_x+j] + lambda_sq*
+          (u[(i+1)*blk_x+j] + u[(i-1)*blk_x+j] + u[i*blk_x+j+1] + u[i*blk_x+j-1] - 4*u[i*blk_x+j]);
+      }
+    }
+	
+	
+}
+
+double initialize(double x, double y, double t)
+{
+  double value = 0;
+#ifdef VERIFY
+  /* standing wave */
+  value = sin(3*M_PI*x)*sin(4*M_PI*y)*cos(5*M_PI*t);
+#else
+  /* squared-cosine hump */
+  const double width = 0.1;
+
+  double centerx = 0.25;
+  double centery = 0.5;
+
+  double dist = sqrt((x-centerx)*(x-centerx) +
+                     (y-centery)*(y-centery));
+  if(dist < width) {
+    double cs = cos(M_PI_2*dist/width);
+    value = cs*cs;
+  }
+#endif
+  return value;
+}
+
+void save_solution(double *u, int Ny, int Nx, int n)
+{
+  char fname[50];
+  sprintf(fname, "solution-%d.dat", n);
+  FILE *fp = fopen(fname, "w");
+
+  fprintf(fp, "%d %d\n", Nx, Ny);
+
+  for(int j = 0; j < Ny; ++j) {
+    for(int k = 0; k < Nx; ++k) {
+      fprintf(fp, "%e\n", u[j*Nx+k]);
+    }
+  }
+
+  fclose(fp);
+}
