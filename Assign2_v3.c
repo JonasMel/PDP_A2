@@ -18,7 +18,7 @@ int main(int argc, char **argv)
 	
 	
 	int Nx, Ny, Nt, px, py, i, j, k, left, right, top, bot;
-	double dt, dx, lambda2, *u_glob, *u, *u_old, *u_new;
+	double dt, dx, lambda2, *u_glob, *u, *u_old, *u_new, *u0;
 	int blk_x, blk_y, blk_size, blk_y_const, blk_x_const;
 	
 	Nx = atoi(argv[1]);
@@ -45,7 +45,10 @@ int main(int argc, char **argv)
 	lambda2 = (dt/dx)*(dt/dx);
 	
 	/*Initializing MPI and creating cartesian grid for processors*/
-	MPI_Request *send_req, rcv_req[2];
+	MPI_Request *send_req, *send_req0, rcv_req[2];
+	MPI_Status status[2];
+	send_req = (MPI_Request*)malloc(px*py*sizeof(MPI_Request));
+	send_req0 = (MPI_Request*)malloc(px*py*sizeof(MPI_Request));
 	MPI_Init(&argc, &argv);
 	int ndims = 2;
 	int glob_rank, reorder, crt_rank, mycrds[ndims]; 
@@ -123,15 +126,15 @@ int main(int argc, char **argv)
 		u = (double*)malloc(blk_x*blk_y*sizeof(double));
 		u_new = (double*)malloc(blk_x*blk_y*sizeof(double));
 	}
-	
+
 	if (glob_rank == 0)
 	{
-		double x, y, *u0;
+		double x, y;
 		u_glob = (double*)malloc(Nx*Ny*sizeof(double));
 		u0 = (double*)malloc(Nx*Ny*sizeof(double));
-		for (i = 0; i < Ny; ++i)
+		for (i = 1; i < Ny-1; ++i)
 		{
-			for (j = 0; j < Nx; ++j)
+			for (j = 1; j < Nx-1; ++j)
 			{
 				y = i*dx;
 				x = j*dx;
@@ -143,7 +146,7 @@ int main(int argc, char **argv)
 		}
 		
 		int dest_cords[2], dest_rank;
-		send_req = (MPI_Request*)malloc(px*py*sizeof(MPI_Request));
+
 		for (i = 0; i < py; ++i)
 		{
 			for (j = 0; j < px; ++j)
@@ -156,30 +159,30 @@ int main(int argc, char **argv)
 					MPI_Type_vector(blk_y+1, blk_x+1, Nx, MPI_DOUBLE, &blk);
 					MPI_Type_commit(&blk);
 					MPI_Isend(&u0[0], 1, blk, dest_rank, dest_rank, \
-									com_crt, &send_req[i*py + j]);
+									com_crt, &send_req0[dest_rank]);
 									
 					MPI_Isend(&u_glob[0], 1, blk, dest_rank, 2*dest_rank, \
-					com_crt, &send_req[i*py + j]);
+									com_crt, &send_req[dest_rank]);
 				}
 				else if (!top && left && right)
 				{
 					MPI_Type_vector(blk_y+1, blk_x+2, Nx, MPI_DOUBLE, &blk);
 					MPI_Type_commit(&blk);
 					MPI_Isend(&u0[j*blk_x-1], 1, blk, dest_rank, dest_rank, \
-									com_crt, &send_req[i*py + j]);
+									com_crt, &send_req0[dest_rank]);
 									
 					MPI_Isend(&u_glob[j*blk_x-1], 1, blk, dest_rank, 2*dest_rank, \
-									com_crt, &send_req[i*py + j]);
+									com_crt, &send_req[dest_rank]);
 				}
 				else if (!top && !right)
 				{
 					MPI_Type_vector(blk_y+1, blk_x+1, Nx, MPI_DOUBLE, &blk);
 					MPI_Type_commit(&blk);
 					MPI_Isend(&u0[j*blk_x-1], 1, blk, dest_rank, dest_rank, \
-									com_crt, &send_req[i*py + j]);
+									com_crt, &send_req0[dest_rank]);
 									
 					MPI_Isend(&u_glob[j*blk_x-1], 1, blk, dest_rank, 2*dest_rank, \
-									com_crt, &send_req[i*py + j]);					
+									com_crt, &send_req[dest_rank]);					
 				}
 				
 				if (!bot && !left)
@@ -187,30 +190,30 @@ int main(int argc, char **argv)
 					MPI_Type_vector(blk_y+1, blk_x+1, Nx, MPI_DOUBLE, &blk);
 					MPI_Type_commit(&blk);
 					MPI_Isend(&u0[Nx*Ny-Nx*(blk_y+1)], 1, blk, dest_rank, dest_rank, \
-									com_crt, &send_req[i*py + j]);
+									com_crt, &send_req0[dest_rank]);
 									
 					MPI_Isend(&u_glob[Nx*Ny-Nx*(blk_y+1)], 1, blk, dest_rank, 2*dest_rank, \
-									com_crt, &send_req[i*py + j]);
+									com_crt, &send_req[dest_rank]);
 				}
 				else if (!bot && left && right)
 				{
 					MPI_Type_vector(blk_y+1, blk_x+2, Nx, MPI_DOUBLE, &blk);
 					MPI_Type_commit(&blk);
 					MPI_Isend(&u0[i*blk_y*Nx-Nx+j*blk_x-1], 1, blk, dest_rank, dest_rank, \
-									com_crt, &send_req[i*py + j]);
+									com_crt, &send_req0[dest_rank]);
 									
 					MPI_Isend(&u_glob[i*blk_y*Nx-Nx+j*blk_x-1], 1, blk, dest_rank, 2*dest_rank, \
-									com_crt, &send_req[i*py + j]);
+									com_crt, &send_req[dest_rank]);
 				}
 				else if (!bot && !right)
 				{
 					MPI_Type_vector(blk_y+1, blk_x+1, Nx, MPI_DOUBLE, &blk);
 					MPI_Type_commit(&blk);
 					MPI_Isend(&u0[i*blk_y*Nx-Nx+j*blk_x-1], 1, blk, dest_rank, dest_rank, \
-									com_crt, &send_req[i*py + j]);
+									com_crt, &send_req0[dest_rank]);
 									
 					MPI_Isend(&u_glob[i*blk_y*Nx-Nx+j*blk_x-1], 1, blk, dest_rank, 2*dest_rank, \
-									com_crt, &send_req[i*py + j]);	
+									com_crt, &send_req[dest_rank]);	
 				}
 				
 				if (top && bot && !left)
@@ -218,53 +221,60 @@ int main(int argc, char **argv)
 					MPI_Type_vector(blk_y+2, blk_x+1, Nx, MPI_DOUBLE, &blk);
 					MPI_Type_commit(&blk);
 					MPI_Isend(&u0[i*blk_y*Nx-Nx+j*blk_x], 1, blk, dest_rank, dest_rank, \
-									com_crt, &send_req[i*py + j]);
+									com_crt, &send_req0[dest_rank]);
 									
 					MPI_Isend(&u_glob[i*blk_y*Nx-Nx+j*blk_x], 1, blk, dest_rank, 2*dest_rank, \
-									com_crt, &send_req[i*py + j]);					
+									com_crt, &send_req[dest_rank]);					
 				}
 				else if (top && bot && !right)
 				{
 					MPI_Type_vector(blk_y+2, blk_x+1, Nx, MPI_DOUBLE, &blk);
 					MPI_Type_commit(&blk);
 					MPI_Isend(&u0[i*blk_y*Nx-Nx+j*blk_x-1], 1, blk, dest_rank, dest_rank, \
-									com_crt, &send_req[i*py + j]);
+									com_crt, &send_req0[dest_rank]);
 									
 					MPI_Isend(&u_glob[i*blk_y*Nx-Nx+j*blk_x-1], 1, blk, dest_rank, 2*dest_rank, \
-									com_crt, &send_req[i*py + j]);					
+									com_crt, &send_req[dest_rank]);					
 				}
 				else if (top && bot && left && right)
 				{
 					MPI_Type_vector(blk_y+2, blk_x+2, Nx, MPI_DOUBLE, &blk);
 					MPI_Type_commit(&blk);
 					MPI_Isend(&u0[i*blk_y*Nx-Nx+j*blk_x-1], 1, blk, dest_rank, dest_rank, \
-									com_crt, &send_req[i*py + j]);
+									com_crt, &send_req0[dest_rank]);
 									
 					MPI_Isend(&u_glob[i*blk_y*Nx-Nx+j*blk_x-1], 1, blk, dest_rank, 2*dest_rank, \
-									com_crt, &send_req[i*py + j]);					
+									com_crt, &send_req[dest_rank]);					
 				}
 
 			}
+		
 		}
 		if (!top && !bot && !right && !left)
 		{	
-			u = u0;
-			u_new = u_glob;
+			memcpy(u, u0, Nx*Ny*sizeof(double));
+			memcpy(u_new, u_glob, Nx*Ny*sizeof(double));
 		}
+	
 	}
+	
 	if (px*py > 1)
 	{
-		MPI_Irecv(u, 1, blk, 0, crt_rank, com_crt, &rcv_req[0]);
-		MPI_Irecv(u_new, 1, blk, 0, 2*crt_rank, com_crt, &rcv_req[1]);
+		MPI_Recv(u, 1, blk, 0, crt_rank, com_crt, &status[0]);
+		MPI_Wait(&send_req0[crt_rank], &status[0]);
+		MPI_Recv(u_new, 1, blk, 0, 2*crt_rank, com_crt, &status[1]);
+		MPI_Wait(&send_req[crt_rank], &status[1]);
 	} 
+
 	for (k = 0; k < px*py; ++k)
 	{
 		if (crt_rank == k)
+				printf("%d recieved transmission \n", crt_rank);
 			for (i = 0; i < blk_y; ++i)
 			{
 				for (j = 0; j < blk_x; ++j)
 				{
-					printf(" %lf", u_new[i*blk_y + j]);
+					printf(" %lf", u_new[i*blk_x + j]);
 				}
 				printf("\n");
 			}
@@ -292,8 +302,8 @@ int main(int argc, char **argv)
 		 free(u0);
 		 free(u_glob);
 	 }
-	 MPI_finalize();
-	
+	 
+	 MPI_Finalize();
 	
 }
 
@@ -305,7 +315,7 @@ double initialize(double x, double y, double t)
   value = sin(3*M_PI*x)*sin(4*M_PI*y)*cos(5*M_PI*t);
 #else
   /* squared-cosine hump */
-  const double width = 0.1;
+  const double width = 0.5;
 
   double centerx = 0.25;
   double centery = 0.5;
