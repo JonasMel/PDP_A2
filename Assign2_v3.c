@@ -76,23 +76,7 @@ int main(int argc, char **argv)
 	MPI_Type_vector(1, blk_x, Nx, MPI_DOUBLE, &row);
 	MPI_Type_commit(&row);
 	
-	/*Checking location*/
-	left = 1;
-	right = 1;
-	top = 1;
-	bot = 1;
-	if (mycrds[0] == 0)
-		top = 0;
-	
-	if (mycrds[1] == px-1)
-		right = 0;
-	
-	if (mycrds[1] == 0)
-		left = 0;
-		
-	if (mycrds[0] == py-1)
-		bot = 0;
-	
+
 	if (px*py > 1)
 	{
 		if ((!left || !right) && (!top || !bot))
@@ -153,7 +137,27 @@ int main(int argc, char **argv)
 			{
 				dest_cords[0] = i;
 				dest_cords[1] = j;
+
 				MPI_Cart_rank(com_crt, dest_cords, &dest_rank);
+
+				/*Checking location*/
+				left = 1;
+				right = 1;
+				top = 1;
+				bot = 1;
+				if (dest_cords[0] == 0)
+					top = 0;
+				
+				if (dest_cords[1] == px-1)
+					right = 0;
+				
+				if (dest_cords[1] == 0)
+					left = 0;
+					
+				if (dest_cords[0] == py-1)
+					bot = 0;
+				
+
 				if (!top && !left)
 				{
 					MPI_Type_vector(blk_y+1, blk_x+1, Nx, MPI_DOUBLE, &blk);
@@ -246,26 +250,27 @@ int main(int argc, char **argv)
 					MPI_Isend(&u_glob[i*blk_y*Nx-Nx+j*blk_x-1], 1, blk, dest_rank, 2*dest_rank, \
 									com_crt, &send_req[dest_rank]);					
 				}
+				if (!top && !bot && !right && !left)
+				{	
+					memcpy(u, u0, Nx*Ny*sizeof(double));
+					memcpy(u_new, u_glob, Nx*Ny*sizeof(double));
+				}
 
 			}
 		
 		}
-		if (!top && !bot && !right && !left)
-		{	
-			memcpy(u, u0, Nx*Ny*sizeof(double));
-			memcpy(u_new, u_glob, Nx*Ny*sizeof(double));
-		}
+
 	
 	}
 	
 	if (px*py > 1)
 	{
 		MPI_Recv(u, 1, blk, 0, crt_rank, com_crt, &status[0]);
-		MPI_Wait(&send_req0[crt_rank], &status[0]);
+	//	MPI_Wait(&send_req0[crt_rank], &status[0]);
 		MPI_Recv(u_new, 1, blk, 0, 2*crt_rank, com_crt, &status[1]);
-		MPI_Wait(&send_req[crt_rank], &status[1]);
+	//	MPI_Wait(&send_req[crt_rank], &status[1]);
 	} 
-
+/*
 	for (k = 0; k < px*py; ++k)
 	{
 		if (crt_rank == k)
@@ -279,7 +284,7 @@ int main(int argc, char **argv)
 				printf("\n");
 			}
 	}
-	
+	*/
     /* Swap ptrs */
     double *tmp = u_old;
     u_old = u;
