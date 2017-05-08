@@ -10,7 +10,7 @@
 #include <sys/time.h>
 
 /* #define WRITE_TO_FILE */
-/* #define VERIFY */
+#define VERIFY 1
 
 double timer();
 double initialize(double x, double y, double t);
@@ -56,7 +56,20 @@ int main(int argc, char *argv[])
       u_new[i*Nx+j] = initialize(x,y,dt);
     }
   }
-
+  		
+		{
+			//printf("offset x: %d\n", offset_x);
+			//printf("offset y: %d\n", offset_y);
+		
+			for(int i=0; i<Ny; ++i)
+			{
+				for(int j=0; j<Nx; ++j)
+				{
+					printf("%f ", u_new[i*Nx+j]);
+				}
+				printf("\n");
+			}
+		}
 #ifdef WRITE_TO_FILE
   save_solution(u_new,Ny,Nx,1);
 #endif
@@ -91,7 +104,7 @@ int main(int argc, char *argv[])
         if(e>error)
           error = e;
       }
-    }
+    } 
     if(error > max_error)
       max_error=error;
 #endif
@@ -100,7 +113,7 @@ int main(int argc, char *argv[])
     save_solution(u_new,Ny,Nx,n);
 #endif
 
-  }
+    }
   end=timer();
 
   printf("Time elapsed: %g s\n",(end-begin));
