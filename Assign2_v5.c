@@ -1,6 +1,3 @@
-// mpicc -g -O3 -o wave Assign2_v4.c -lmpi -lm
-// mpirun -np 16 ./wave 8 4 4
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -53,20 +50,63 @@ int main(int argc, char **argv)
 	MPI_Comm_split(com_crt, mycrds[0], mycrds[1], &crt_row);
 	MPI_Comm_split(com_crt, mycrds[1], mycrds[0], &crt_col);
 	
-	/*Fixing block sizes and stuff*/	
+	/*Fixing block sizes and starting position if Nx or Ny is not divided evenly.*/
 	remainx = Nx % px;
-	blk_x = Nx/px;
-	blk_x_const = blk_x;
+	blk_x = (int)Nx/px;
+	blk_x_const = blk_x;		
+	int left_bnd = 0;
+	int right_bnd;;
 	if ( remainx > 0 && mycrds[1] < remainx)
+	{
 		blk_x++;
+		right_bnd = blk_x_const;
+	}
+	else
+		right_bnd = blk_x_const-1;
 		
 	remainy = Ny % py;
-	blk_y = Ny/py;
-	blk_y_const = blk_y;
+	blk_y = (int)Ny/py;
+	blk_y_const = blk_y;	
+	int top_bnd = 0;
+	int bot_bnd;
 	if ( remainy > 0 && mycrds[0] < remainy)
+	{
 		blk_y++;
-		
+		bot_bnd = blk_y_const;
+	}
+	else
+		bot_bnd = blk_y_const-1;
+			
+	int startx, starty;
+	if ( remainx > mycrds[1] && mycrds[1] > 0)
+	{
+		startx = blk_x*mycrds[1];
+	}
+	else if (mycrds[1] >= remainx && remainx > 0)
+	{
+		startx = blk_x*mycrds[1] + remainx;
+	}
+	else 
+	{
+		startx = blk_x_const*mycrds[1];
+	}
+	
+	
+	if (remainy > mycrds[0] && mycrds[0] > 0)
+	{
+		starty = blk_y*mycrds[0];
+	}
+	else if (mycrds[0] >= remainy && remainy > 0)
+	{
+		starty = blk_y*mycrds[0] + remainy;
+	}
+	else
+	{
+		starty = blk_y_const*mycrds[0];
+	}
 
+
+	
 	
 	blk_size = blk_x*blk_y;
 	dx = 1.0 / (Nx-1);
@@ -76,7 +116,7 @@ int main(int argc, char **argv)
 	
 	/*Creating vector types for communication*/
 	MPI_Datatype blk, row, col;
-	MPI_Type_vector(blk_y_const, blk_x_const, Nx, MPI_DOUBLE, &blk);
+	MPI_Type_vector(blk_y, blk_x, Nx, MPI_DOUBLE, &blk);
 	MPI_Type_commit(&blk);
 
 	/*Checking location*/
@@ -96,10 +136,7 @@ int main(int argc, char **argv)
 	if (mycrds[0] == py-1)
 		bot = 0;
 
-	int top_bnd = 0;
-	int bot_bnd = blk_y_const-1;
-	int left_bnd = 0;
-	int right_bnd = blk_x_const-1;
+
 	
 	if (!top && !left && right && bot)
 	{
@@ -237,6 +274,7 @@ int main(int argc, char **argv)
 		left_bnd++;
 		right_bnd -= 1;
 	}
+
 	
 	u_old = (double*)malloc(blk_x*blk_y*sizeof(double));
 	u = (double*)malloc(blk_x*blk_y*sizeof(double));
@@ -251,8 +289,8 @@ int main(int argc, char **argv)
 	{
 		for(int j = left_bnd; j <= right_bnd; ++j) 
 		{
-			double x = (j+blk_x_const*mycrds[1])*dx;
-			double y = (i+blk_y_const*mycrds[0])*dx;
+			double x = (j+startx)*dx;
+			double y = (i+starty)*dx;
 
 			/* u0 */
 			u[(i+offset_y)*blk_x+j+offset_x] = initialize(x, y, 0);
@@ -270,21 +308,28 @@ int main(int argc, char **argv)
 		printf("\n");
 	}
 */
-	/*		if (crt_rank == 0)
+		/*	if (crt_rank == 0)
 			{	
 				printf("Process coords: (%d, %d)\n", mycrds[0], mycrds[1]);
-				for (i = 0; i < blk_y; ++i)
+				for (i = top_bnd; i <= bot_bnd; ++i)
 				{
-					for (j = 0; j < blk_x; ++j)
+					for (j = left_bnd; j <= right_bnd; ++j)
 					{
 						printf(" %lf", u_new[i*blk_y + j]);
 					}
 					printf("\n");
 				}
 			}*/
-	MPI_Type_vector(blk_y_const, 1, blk_x, MPI_DOUBLE, &col);
+	if (remainy && mycrds[0] < remainy)
+		MPI_Type_vector(blk_y_const+1, 1, blk_x, MPI_DOUBLE, &col);
+	else
+		MPI_Type_vector(blk_y_const, 1, blk_x, MPI_DOUBLE, &col);
+		
 	MPI_Type_commit(&col);
-	MPI_Type_vector(1, blk_x_const, blk_x, MPI_DOUBLE, &row);
+	if (remainx && mycrds[1] < remainx)
+		MPI_Type_vector(1, blk_x_const+1, blk_x, MPI_DOUBLE, &row);
+	else
+		MPI_Type_vector(1, blk_x_const, blk_x, MPI_DOUBLE, &row);
 	MPI_Type_commit(&row);
 	
 	for (k = 2; k < Nt; ++k)
@@ -327,7 +372,7 @@ int main(int argc, char **argv)
 		
 		//for (ii = 0; ii < px*py; ++ii)
 		//{
-		/*	if (crt_rank == 0)
+	/*		if (crt_rank == 0)
 			{	
 				printf("Process coords: (%d, %d)\n", mycrds[0], mycrds[1]);
 				for (i = 0; i < blk_y; ++i)
@@ -376,26 +421,28 @@ int main(int argc, char **argv)
 		}
 #ifdef VERIFY	
 		double error=0.0;
+	//	if (crt_rank == 0) printf("crt_rank is %d\n", crt_rank);
 		for(int i = top_bnd; i <= bot_bnd; ++i) 
 		{
 			for(int j = left_bnd; j <= right_bnd; ++j)
 			{
-				double e = fabs(u_new[(i+offset_y)*blk_x+j+offset_x]-initialize((j+blk_x_const*mycrds[1])*dx,\
-								(i+blk_y_const*mycrds[0])*dx, k*dt));
-				/*if (crt_rank == 0)
+				double e = fabs(u_new[(i+offset_y)*blk_x+j+offset_x]-initialize((j+startx)*dx, \
+								(i+starty)*dx, k*dt));
+		/*		if (crt_rank == 0)
 				{
 				printf(" %lf", initialize((j+blk_x_const*mycrds[1])*dx, \
 								(i+blk_y_const*mycrds[0])*dx, k*dt));
 				}*/
 				if(e>error)
 					error = e;
-			}/*
-			if (crt_rank == 0)
+			}
+		/*	if (crt_rank == 0)
 				printf("\n");*/
 		}
 #endif
-/*		if (crt_rank == 0)
+		/*if (crt_rank == 0)
 		{	
+			printf("Process coords: (%d, %d)\n", mycrds[0], mycrds[1]);
 			for (i = top_bnd; i <= bot_bnd; ++i)
 			{
 				for (j = left_bnd; j <= right_bnd; ++j)
@@ -412,13 +459,14 @@ int main(int argc, char **argv)
 	
 	}
 	printf("max error = %4.16lf\n", max_error);
+	
 	free(u);
 	free(u_new);
 	free(u_old);
 	
-	if (glob_rank == 0)
+/*	if (glob_rank == 0)
 		free(u_glob);
-	
+	*/
 	MPI_Finalize();
 }
 
