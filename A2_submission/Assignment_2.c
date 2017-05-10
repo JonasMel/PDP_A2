@@ -10,7 +10,6 @@
 
 double timer();
 double initialize(double x, double y, double t);
-void save_solution(double *u, int Ny, int Nx, int n);
 
 int main(int argc, char **argv)
 {
