@@ -1,3 +1,12 @@
+/*
+ * Partial and distributed programming 
+ * Assignment 2. May 10 2017
+ * Authors:
+ * Jonas Melander
+ * Lina Viklund
+ * Aleksandra Obeso Duque
+ * 
+*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
